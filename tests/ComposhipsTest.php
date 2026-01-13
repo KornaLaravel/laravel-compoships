@@ -154,7 +154,6 @@ class ComposhipsTest extends TestCase
 
     public function testHas()
     {
-
         $allocations = Allocation::has('trackingTasks')
             ->get()
             ->toArray();
@@ -167,7 +166,6 @@ class ComposhipsTest extends TestCase
      */
     public function testWhereHas()
     {
-
         $allocations = Allocation::wherehas('trackingTasks')
             ->get()
             ->toArray();
@@ -184,7 +182,6 @@ class ComposhipsTest extends TestCase
 
     public function testWhereHasCallback()
     {
-
         $allocations = Allocation::wherehas('trackingTasks', function ($query) {
             $query->where('vehicle_id', 1);
         })
@@ -214,7 +211,6 @@ class ComposhipsTest extends TestCase
 
     public function testHasForSelfRelation()
     {
-
         $trackingTask = TrackingTask::has('subTasks')
             ->get()
             ->toArray();
@@ -224,7 +220,6 @@ class ComposhipsTest extends TestCase
 
     public function testHasWithBelongsToRelation()
     {
-
         $pickup_times = PickupTime::has('pickupPoint')
             ->get()
             ->toArray();
@@ -248,7 +243,6 @@ class ComposhipsTest extends TestCase
 
     public function testHasOneOrManyFactoryRelationship()
     {
-
         $allocation = Allocation::factory()
             ->has(TrackingTask::factory()->count(2)) // A Compoships relationship
             ->has(OriginalPackage::factory()->count(3)) // A standard relationship

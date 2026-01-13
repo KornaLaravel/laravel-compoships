@@ -295,7 +295,6 @@ class HasManyTest extends TestCase
 
     public function test_Illuminate_chaperone()
     {
-
         $allocationId1 = Capsule::table('allocations')->insertGetId([
             'booking_id' => 1,
             'vehicle_id' => 1,
