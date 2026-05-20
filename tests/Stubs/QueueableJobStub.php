@@ -10,8 +10,11 @@ class QueueableJobStub
 
     public $model;
 
-    public function __construct($model)
+    public $secondModel;
+
+    public function __construct($model, $secondModel = null)
     {
         $this->model = $model;
+        $this->secondModel = $secondModel;
     }
 }

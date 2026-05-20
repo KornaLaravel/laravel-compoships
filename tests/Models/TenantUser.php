@@ -22,4 +22,13 @@ class TenantUser extends Model
     protected $guarded = [];
 
     protected $compositeKey = ['id', 'tenant_id'];
+
+    public function notes()
+    {
+        return $this->hasMany(
+            TenantUserNote::class,
+            ['tenant_user_id', 'tenant_id'],
+            ['id', 'tenant_id']
+        );
+    }
 }

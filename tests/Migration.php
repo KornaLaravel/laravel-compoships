@@ -257,5 +257,12 @@ class Migration extends BaseMigration
             $table->string('name')->nullable();
             $table->primary(['code', 'tenant_id']);
         });
+
+        Capsule::schema()->create('tenant_user_notes', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('tenant_user_id');
+            $table->string('tenant_id');
+            $table->string('note');
+        });
     }
 }

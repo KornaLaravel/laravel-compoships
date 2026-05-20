@@ -3,7 +3,9 @@
 namespace Awobaz\Compoships\Tests\Unit;
 
 use Awobaz\Compoships\Exceptions\InvalidUsageException;
+use Awobaz\Compoships\Tests\Enums\TenantEnum;
 use Awobaz\Compoships\Tests\Models\Allocation;
+use Awobaz\Compoships\Tests\Models\EnumTenantUser;
 use Awobaz\Compoships\Tests\Models\MisconfiguredTenantUser;
 use Awobaz\Compoships\Tests\Models\ScopedUser;
 use Awobaz\Compoships\Tests\Models\TenantUser;
@@ -207,5 +209,74 @@ class CompositeKeyQueueSerializationTest extends TestCase
         $this->assertNotNull($selectEntry);
         $this->assertStringContainsString('"id" = ?', $selectEntry['query']);
         $this->assertStringNotContainsString('"tenant_id"', $selectEntry['query']);
+    }
+
+    public function test_multiple_composite_models_on_job_roundtrip()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+            ['id' => 'u2', 'tenant_id' => 't1', 'name' => 'Carol'],
+        ]);
+
+        $alice = TenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        $carol = TenantUser::where('id', 'u2')->where('tenant_id', 't1')->first();
+
+        $job = new QueueableJobStub($alice, $carol);
+        $restored = unserialize(serialize($job));
+
+        $this->assertInstanceOf(TenantUser::class, $restored->model);
+        $this->assertSame('Alice', $restored->model->name);
+        $this->assertSame('t1', $restored->model->tenant_id);
+
+        $this->assertInstanceOf(TenantUser::class, $restored->secondModel);
+        $this->assertSame('Carol', $restored->secondModel->name);
+        $this->assertSame('u2', $restored->secondModel->id);
+    }
+
+    public function test_loaded_relations_survive_roundtrip()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+        Capsule::table('tenant_user_notes')->insert([
+            ['tenant_user_id' => 'u1', 'tenant_id' => 't1', 'note' => 'first'],
+            ['tenant_user_id' => 'u1', 'tenant_id' => 't1', 'note' => 'second'],
+            ['tenant_user_id' => 'u1', 'tenant_id' => 't2', 'note' => 'bob-only'],
+        ]);
+
+        $user = TenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        $user->load('notes');
+        $this->assertCount(2, $user->notes);
+
+        $job = new QueueableJobStub($user);
+        $restored = unserialize(serialize($job));
+
+        $this->assertTrue($restored->model->relationLoaded('notes'));
+        $this->assertCount(2, $restored->model->notes);
+
+        $noteTexts = $restored->model->notes->pluck('note')->sort()->values()->all();
+        $this->assertSame(['first', 'second'], $noteTexts);
+    }
+
+    public function test_backed_enum_composite_column_roundtrip()
+    {
+        Capsule::table('enum_tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+
+        $user = EnumTenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        $this->assertInstanceOf(TenantEnum::class, $user->tenant_id);
+        $this->assertSame('t1', $user->tenant_id->value);
+
+        $job = new QueueableJobStub($user);
+        $restored = unserialize(serialize($job));
+
+        $this->assertInstanceOf(EnumTenantUser::class, $restored->model);
+        $this->assertSame('Alice', $restored->model->name);
+        $this->assertInstanceOf(TenantEnum::class, $restored->model->tenant_id);
+        $this->assertSame('t1', $restored->model->tenant_id->value);
     }
 }
