@@ -9,6 +9,7 @@ use Awobaz\Compoships\Database\Grammar\PostgresGrammar;
 use Awobaz\Compoships\Database\Grammar\SQLiteGrammar;
 use Awobaz\Compoships\Database\Grammar\SqlServerGrammar;
 use Awobaz\Compoships\Database\Query\Builder as QueryBuilder;
+use Awobaz\Compoships\Exceptions\InvalidUsageException;
 use Illuminate\Support\Str;
 
 trait Compoships
@@ -40,6 +41,77 @@ trait Compoships
         }
 
         return parent::qualifyColumn($column);
+    }
+
+    /**
+     * Composite-key columns to AND into the save/select WHERE clause,
+     * excluding the scalar primary key (already added by parent).
+     *
+     * Consumers opt in by declaring `protected $compositeKey = [...]`
+     * on the consuming model. The property is intentionally NOT declared
+     * on the trait so consumers can pick their own default value without
+     * triggering PHP's "trait property re-declaration" incompatibility.
+     *
+     * @return array<int, string>
+     *
+     * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     */
+    protected function getAdditionalKeyNames()
+    {
+        if (! property_exists($this, 'compositeKey') || empty($this->compositeKey)) {
+            return [];
+        }
+
+        if (! in_array($this->getKeyName(), $this->compositeKey, true)) {
+            throw new InvalidUsageException(sprintf(
+                'Model %s declares $compositeKey but does not include the scalar primary key "%s". Add it to $compositeKey or remove $compositeKey entirely.',
+                static::class,
+                $this->getKeyName()
+            ));
+        }
+
+        return array_values(array_diff($this->compositeKey, [$this->getKeyName()]));
+    }
+
+    /**
+     * Set the keys for a save UPDATE / DELETE query, including any
+     * additional composite-key columns declared via $compositeKey.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     *
+     * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     */
+    protected function setKeysForSaveQuery($query)
+    {
+        $query = parent::setKeysForSaveQuery($query);
+
+        foreach ($this->getAdditionalKeyNames() as $column) {
+            $query->where($column, '=', $this->getRawOriginal($column) ?? $this->getAttribute($column));
+        }
+
+        return $query;
+    }
+
+    /**
+     * Set the keys for a SELECT query used by fresh() / refresh(),
+     * including any additional composite-key columns declared via
+     * $compositeKey.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     *
+     * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     */
+    protected function setKeysForSelectQuery($query)
+    {
+        $query = parent::setKeysForSelectQuery($query);
+
+        foreach ($this->getAdditionalKeyNames() as $column) {
+            $query->where($column, '=', $this->getRawOriginal($column) ?? $this->getAttribute($column));
+        }
+
+        return $query;
     }
 
     /**

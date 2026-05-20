@@ -213,5 +213,35 @@ class Migration extends BaseMigration
             $table->integer('right_division_id')->unsigned();
             $table->timestamps();
         });
+
+        Capsule::schema()->create('tenant_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('tenant_id');
+            $table->string('name')->nullable();
+            $table->primary(['id', 'tenant_id']);
+        });
+
+        Capsule::schema()->create('three_col_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('tenant_id');
+            $table->string('region_id');
+            $table->string('name')->nullable();
+            $table->primary(['id', 'tenant_id', 'region_id']);
+        });
+
+        Capsule::schema()->create('soft_delete_tenant_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('tenant_id');
+            $table->string('name')->nullable();
+            $table->softDeletes();
+            $table->primary(['id', 'tenant_id']);
+        });
+
+        Capsule::schema()->create('enum_tenant_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('tenant_id');
+            $table->string('name')->nullable();
+            $table->primary(['id', 'tenant_id']);
+        });
     }
 }

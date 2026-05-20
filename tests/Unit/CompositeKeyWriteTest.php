@@ -1,0 +1,229 @@
+<?php
+
+namespace Awobaz\Compoships\Tests\Unit;
+
+use Awobaz\Compoships\Exceptions\InvalidUsageException;
+use Awobaz\Compoships\Tests\Enums\TenantEnum;
+use Awobaz\Compoships\Tests\Models\Allocation;
+use Awobaz\Compoships\Tests\Models\EnumTenantUser;
+use Awobaz\Compoships\Tests\Models\MisconfiguredTenantUser;
+use Awobaz\Compoships\Tests\Models\SoftDeleteTenantUser;
+use Awobaz\Compoships\Tests\Models\TenantUser;
+use Awobaz\Compoships\Tests\Models\ThreeColUser;
+use Awobaz\Compoships\Tests\TestCase\TestCase;
+use Illuminate\Database\Capsule\Manager as Capsule;
+
+/**
+ * @covers \Awobaz\Compoships\Compoships::getAdditionalKeyNames
+ * @covers \Awobaz\Compoships\Compoships::setKeysForSaveQuery
+ * @covers \Awobaz\Compoships\Compoships::setKeysForSelectQuery
+ */
+class CompositeKeyWriteTest extends TestCase
+{
+    public function test_update_includes_composite_key_in_where()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+
+        $alice = TenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        $alice->name = 'Alice2';
+        $alice->save();
+
+        $rows = Capsule::table('tenant_users')->orderBy('tenant_id')->get();
+        $this->assertSame('Alice2', $rows[0]->name);
+        $this->assertSame('Bob', $rows[1]->name);
+    }
+
+    public function test_delete_includes_composite_key_in_where()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+
+        TenantUser::where('id', 'u1')->where('tenant_id', 't1')->first()->delete();
+
+        $rows = Capsule::table('tenant_users')->get();
+        $this->assertCount(1, $rows);
+        $this->assertSame('t2', $rows[0]->tenant_id);
+    }
+
+    public function test_refresh_includes_composite_key_in_where()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+
+        $alice = TenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        Capsule::table('tenant_users')
+            ->where('id', 'u1')
+            ->where('tenant_id', 't1')
+            ->update(['name' => 'Mutated']);
+
+        $alice->refresh();
+
+        $this->assertSame('Mutated', $alice->name);
+    }
+
+    public function test_save_uses_original_composite_value_after_inmemory_mutation()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+        ]);
+
+        $alice = TenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        $alice->tenant_id = 't99';
+        $alice->name = 'Alice2';
+        $alice->save();
+
+        $rows = Capsule::table('tenant_users')->get();
+        $this->assertCount(1, $rows);
+        $this->assertSame('u1', $rows[0]->id);
+        $this->assertSame('t99', $rows[0]->tenant_id);
+        $this->assertSame('Alice2', $rows[0]->name);
+    }
+
+    public function test_default_behavior_unchanged_when_composite_key_empty()
+    {
+        $allocation = new Allocation();
+        $allocation->user_id = 1;
+        $allocation->booking_id = 2;
+        $allocation->vehicle_id = 3;
+        $allocation->save();
+
+        Capsule::connection()->flushQueryLog();
+        Capsule::connection()->enableQueryLog();
+
+        $allocation->user_id = 99;
+        $allocation->save();
+
+        $log = Capsule::connection()->getQueryLog();
+        Capsule::connection()->disableQueryLog();
+
+        $updateEntry = collect($log)->first(fn ($q) => stripos($q['query'], 'update') === 0);
+        $this->assertNotNull($updateEntry, 'no update query was captured');
+
+        $wherePosition = stripos($updateEntry['query'], 'where');
+        $this->assertNotFalse($wherePosition, 'update query has no WHERE clause');
+
+        $whereClause = substr($updateEntry['query'], $wherePosition);
+        $this->assertStringContainsString('"id" = ?', $whereClause);
+        $this->assertStringNotContainsString('"tenant_id"', $whereClause);
+    }
+
+    public function test_three_column_composite_key()
+    {
+        Capsule::table('three_col_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'region_id' => 'r1', 'name' => 'Alpha'],
+            ['id' => 'u1', 'tenant_id' => 't1', 'region_id' => 'r2', 'name' => 'Beta'],
+        ]);
+
+        $row = ThreeColUser::where('id', 'u1')
+            ->where('tenant_id', 't1')
+            ->where('region_id', 'r1')
+            ->first();
+        $row->name = 'Alpha2';
+        $row->save();
+
+        $rows = Capsule::table('three_col_users')->orderBy('region_id')->get();
+        $this->assertSame('Alpha2', $rows[0]->name);
+        $this->assertSame('Beta', $rows[1]->name);
+    }
+
+    public function test_compositekey_missing_scalar_primary_key_throws()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+        ]);
+
+        $row = MisconfiguredTenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        $row->name = 'X';
+
+        try {
+            $row->save();
+            $this->fail('Expected InvalidUsageException was not thrown');
+        } catch (InvalidUsageException $e) {
+            $this->assertStringContainsString(MisconfiguredTenantUser::class, $e->getMessage());
+            $this->assertStringContainsString('"id"', $e->getMessage());
+        }
+    }
+
+    public function test_soft_delete_uses_composite_key_in_where()
+    {
+        Capsule::table('soft_delete_tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice', 'deleted_at' => null],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob', 'deleted_at' => null],
+        ]);
+
+        SoftDeleteTenantUser::where('id', 'u1')->where('tenant_id', 't1')->first()->delete();
+
+        $aliceRow = Capsule::table('soft_delete_tenant_users')
+            ->where('id', 'u1')
+            ->where('tenant_id', 't1')
+            ->first();
+        $bobRow = Capsule::table('soft_delete_tenant_users')
+            ->where('id', 'u1')
+            ->where('tenant_id', 't2')
+            ->first();
+
+        $this->assertNotNull($aliceRow->deleted_at);
+        $this->assertNull($bobRow->deleted_at);
+    }
+
+    public function test_backed_enum_composite_column_binds_raw_value()
+    {
+        Capsule::table('enum_tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+        ]);
+
+        $row = EnumTenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        $this->assertInstanceOf(TenantEnum::class, $row->tenant_id);
+
+        Capsule::connection()->flushQueryLog();
+        Capsule::connection()->enableQueryLog();
+
+        $row->name = 'Alice2';
+        $row->save();
+
+        $log = Capsule::connection()->getQueryLog();
+        Capsule::connection()->disableQueryLog();
+
+        $updateEntry = collect($log)->first(fn ($q) => stripos($q['query'], 'update') === 0);
+        $this->assertNotNull($updateEntry, 'no update query was captured');
+
+        foreach ($updateEntry['bindings'] as $binding) {
+            $this->assertNotInstanceOf(TenantEnum::class, $binding, 'enum object leaked into bindings');
+        }
+        $this->assertContains('t1', $updateEntry['bindings'], 'raw tenant_id value missing from bindings');
+    }
+
+    public function test_scalar_primary_key_contract_preserved()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+
+        $alice = TenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        $this->assertSame('u1', $alice->getKey());
+        $this->assertIsString($alice->getKey());
+
+        Capsule::connection()->flushQueryLog();
+        Capsule::connection()->enableQueryLog();
+
+        $found = TenantUser::find('u1');
+
+        $log = Capsule::connection()->getQueryLog();
+        Capsule::connection()->disableQueryLog();
+
+        $this->assertInstanceOf(TenantUser::class, $found);
+
+        $selectEntry = collect($log)->first(fn ($q) => stripos($q['query'], 'select') === 0);
+        $this->assertNotNull($selectEntry);
+        $this->assertStringContainsString('"id" = ?', $selectEntry['query']);
+        $this->assertStringNotContainsString('"tenant_id"', $selectEntry['query']);
+    }
+}
