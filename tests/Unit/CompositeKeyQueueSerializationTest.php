@@ -141,4 +141,71 @@ class CompositeKeyQueueSerializationTest extends TestCase
         $decoded = json_decode($id, true);
         $this->assertSame(['id' => 'u1', 'tenant_id' => 't1'], $decoded);
     }
+
+    public function test_newQueryForRestoration_falls_through_on_wrong_shape_json()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+        ]);
+
+        $instance = new TenantUser();
+        $bogusId = '{"id":"u1","tenant_id":"t1","extra":"x"}';
+
+        Capsule::connection()->flushQueryLog();
+        Capsule::connection()->enableQueryLog();
+
+        $instance->newQueryForRestoration($bogusId)->first();
+
+        $log = Capsule::connection()->getQueryLog();
+        Capsule::connection()->disableQueryLog();
+
+        $selectEntry = collect($log)->first(fn ($q) => stripos($q['query'], 'select') === 0);
+        $this->assertNotNull($selectEntry);
+        $this->assertStringContainsString('"id" = ?', $selectEntry['query']);
+        $this->assertStringNotContainsString('"tenant_id"', $selectEntry['query']);
+    }
+
+    public function test_newQueryForRestoration_falls_through_on_non_json_string()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+        ]);
+
+        $instance = new TenantUser();
+
+        Capsule::connection()->flushQueryLog();
+        Capsule::connection()->enableQueryLog();
+
+        $instance->newQueryForRestoration('not-json-at-all')->first();
+
+        $log = Capsule::connection()->getQueryLog();
+        Capsule::connection()->disableQueryLog();
+
+        $selectEntry = collect($log)->first(fn ($q) => stripos($q['query'], 'select') === 0);
+        $this->assertNotNull($selectEntry);
+        $this->assertStringContainsString('"id" = ?', $selectEntry['query']);
+        $this->assertStringNotContainsString('"tenant_id"', $selectEntry['query']);
+    }
+
+    public function test_newQueryForRestoration_falls_through_on_integer_id()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => '123', 'tenant_id' => 't1', 'name' => 'Alice'],
+        ]);
+
+        $instance = new TenantUser();
+
+        Capsule::connection()->flushQueryLog();
+        Capsule::connection()->enableQueryLog();
+
+        $instance->newQueryForRestoration(123)->first();
+
+        $log = Capsule::connection()->getQueryLog();
+        Capsule::connection()->disableQueryLog();
+
+        $selectEntry = collect($log)->first(fn ($q) => stripos($q['query'], 'select') === 0);
+        $this->assertNotNull($selectEntry);
+        $this->assertStringContainsString('"id" = ?', $selectEntry['query']);
+        $this->assertStringNotContainsString('"tenant_id"', $selectEntry['query']);
+    }
 }

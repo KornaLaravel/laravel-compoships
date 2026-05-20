@@ -136,6 +136,15 @@ trait Compoships
      * predicates for every composite column. Non-composite ids and
      * shape-mismatched payloads delegate to the parent path.
      *
+     * Collection round-trip is not supported. Laravel's restoreCollection
+     * re-keys loaded models by scalar getKey() and looks up by the
+     * original queued ids, which for composite-keyed models are our
+     * JSON-encoded composite strings. The keys never match and the
+     * restored collection is empty. Fixing this requires a Laravel
+     * change to restoreCollection (overriding getKey() to return JSON
+     * is not viable because getKey() is used by find, route binding,
+     * associate, and many other internal paths).
+     *
      * @param  mixed  $ids
      * @return \Illuminate\Database\Eloquent\Builder
      */
