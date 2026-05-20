@@ -275,7 +275,9 @@ The following operations are **not** affected. They remain identical to stock El
 
 * `Model::find($id)` looks up by the scalar primary key only.
 * `firstOrCreate`, `updateOrCreate`, and similar helpers build their own WHERE clauses from user input.
-* Route model binding by single id and queue serialization continue to use the scalar key.
+* Route model binding by single id continues to use the scalar key.
+
+Queue serialization (via `Illuminate\Queue\SerializesModels`, used by queueable jobs, events, and notifications) now participates in composite handling: `getQueueableId()` returns a JSON-encoded array of the composite key columns, and `newQueryForRestoration()` decodes it back into a query that scopes by every key column on the worker side. Round-tripping a composite-keyed model through the queue reloads the exact composite row that was queued. Old queued payloads predating this feature (with a scalar id) continue to restore via the parent path, so no queue drain is required on upgrade.
 
 If you declare `$compositeKey` on a model whose array does not contain the value of `$primaryKey`, the trait throws `Awobaz\Compoships\Exceptions\InvalidUsageException` on the first save, delete, or refresh. The array must enumerate the whole primary key.
 
@@ -302,7 +304,8 @@ The package does not re-implement Laravel's primary-key handling end-to-end. The
 
 * `Model::find($id)` lookups.
 * Route model binding.
-* Queue serialization via `SerializesModels` (jobs, events, notifications rehydrate via the scalar key).
+
+Queue serialization (`Illuminate\Queue\SerializesModels`) is supported for composite-keyed models. See the "Composite primary keys" section for the round-trip contract.
 
 Builder-level bulk operations (`Model::query()->...->update(...)`) continue to use whatever WHERE clauses you build. For composite-key bulk patterns, the custom Query Builder's tuple `whereIn` works directly:
 

@@ -74,6 +74,95 @@ trait Compoships
     }
 
     /**
+     * Composite-key column values keyed by column name, for use in
+     * queue serialization identity blobs. Returns null when the
+     * consumer has not opted into composite-key handling.
+     *
+     * Value source is the current in-memory attribute value (NOT raw
+     * original). This matches Laravel's stock getQueueableId semantic
+     * that queue serialization captures the model's current identity.
+     *
+     * @return array<string, mixed>|null
+     *
+     * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     */
+    protected function getCompositeKeyValues()
+    {
+        if (! property_exists($this, 'compositeKey') || empty($this->compositeKey)) {
+            return null;
+        }
+
+        if (! in_array($this->getKeyName(), $this->compositeKey, true)) {
+            throw new InvalidUsageException(sprintf(
+                'Model %s declares $compositeKey but does not include the scalar primary key "%s". Add it to $compositeKey or remove $compositeKey entirely.',
+                static::class,
+                $this->getKeyName()
+            ));
+        }
+
+        $values = [];
+
+        foreach ($this->compositeKey as $column) {
+            $values[$column] = $this->getAttribute($column);
+        }
+
+        return $values;
+    }
+
+    /**
+     * Override getQueueableId to return a JSON-encoded composite key
+     * tuple when $compositeKey is declared. The string form keeps the
+     * id out of Laravel's restoreCollection branch, which fires on
+     * is_array($id) and is intended for EloquentCollection round-trip.
+     *
+     * @return mixed
+     *
+     * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     */
+    public function getQueueableId()
+    {
+        $values = $this->getCompositeKeyValues();
+
+        if ($values === null) {
+            return parent::getQueueableId();
+        }
+
+        return json_encode($values);
+    }
+
+    /**
+     * Override newQueryForRestoration to decode a JSON-encoded composite
+     * id and build a query that ANDs equality (or whereNull for null)
+     * predicates for every composite column. Non-composite ids and
+     * shape-mismatched payloads delegate to the parent path.
+     *
+     * @param  mixed  $ids
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function newQueryForRestoration($ids)
+    {
+        if (is_string($ids) && property_exists($this, 'compositeKey') && ! empty($this->compositeKey)) {
+            $decoded = json_decode($ids, true);
+
+            if (is_array($decoded)
+                && count($decoded) === count($this->compositeKey)
+                && empty(array_diff(array_keys($decoded), $this->compositeKey))) {
+                $query = $this->newQueryWithoutScopes();
+
+                foreach ($decoded as $column => $value) {
+                    $value === null
+                        ? $query->whereNull($column)
+                        : $query->where($column, '=', $value);
+                }
+
+                return $query;
+            }
+        }
+
+        return parent::newQueryForRestoration($ids);
+    }
+
+    /**
      * Set the keys for a save UPDATE / DELETE query, including any
      * additional composite-key columns declared via $compositeKey.
      *
