@@ -243,5 +243,19 @@ class Migration extends BaseMigration
             $table->string('name')->nullable();
             $table->primary(['id', 'tenant_id']);
         });
+
+        Capsule::schema()->create('scoped_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('scope_id')->nullable();
+            $table->string('name')->nullable();
+            $table->unique(['id', 'scope_id']);
+        });
+
+        Capsule::schema()->create('coded_users', function (Blueprint $table) {
+            $table->string('code');
+            $table->string('tenant_id');
+            $table->string('name')->nullable();
+            $table->primary(['code', 'tenant_id']);
+        });
     }
 }

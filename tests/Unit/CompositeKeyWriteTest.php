@@ -5,8 +5,10 @@ namespace Awobaz\Compoships\Tests\Unit;
 use Awobaz\Compoships\Exceptions\InvalidUsageException;
 use Awobaz\Compoships\Tests\Enums\TenantEnum;
 use Awobaz\Compoships\Tests\Models\Allocation;
+use Awobaz\Compoships\Tests\Models\CodedUser;
 use Awobaz\Compoships\Tests\Models\EnumTenantUser;
 use Awobaz\Compoships\Tests\Models\MisconfiguredTenantUser;
+use Awobaz\Compoships\Tests\Models\ScopedUser;
 use Awobaz\Compoships\Tests\Models\SoftDeleteTenantUser;
 use Awobaz\Compoships\Tests\Models\TenantUser;
 use Awobaz\Compoships\Tests\Models\ThreeColUser;
@@ -225,5 +227,210 @@ class CompositeKeyWriteTest extends TestCase
         $this->assertNotNull($selectEntry);
         $this->assertStringContainsString('"id" = ?', $selectEntry['query']);
         $this->assertStringNotContainsString('"tenant_id"', $selectEntry['query']);
+    }
+
+    public function test_null_composite_column_uses_is_null()
+    {
+        Capsule::table('scoped_users')->insert([
+            ['id' => '1', 'scope_id' => null, 'name' => 'Alice'],
+            ['id' => '1', 'scope_id' => 'x',  'name' => 'Bob'],
+        ]);
+
+        $alice = ScopedUser::where('id', '1')->whereNull('scope_id')->first();
+        $alice->name = 'Alice2';
+        $alice->save();
+
+        $aliceRow = Capsule::table('scoped_users')->where('id', '1')->whereNull('scope_id')->first();
+        $bobRow = Capsule::table('scoped_users')->where('id', '1')->where('scope_id', 'x')->first();
+
+        $this->assertSame('Alice2', $aliceRow->name);
+        $this->assertSame('Bob', $bobRow->name);
+    }
+
+    public function test_refresh_with_null_composite_column_uses_is_null()
+    {
+        Capsule::table('scoped_users')->insert([
+            ['id' => '1', 'scope_id' => null, 'name' => 'Alice'],
+            ['id' => '1', 'scope_id' => 'x',  'name' => 'Bob'],
+        ]);
+
+        $alice = ScopedUser::where('id', '1')->whereNull('scope_id')->first();
+        Capsule::table('scoped_users')
+            ->where('id', '1')
+            ->whereNull('scope_id')
+            ->update(['name' => 'Mutated']);
+
+        $alice->refresh();
+
+        $this->assertSame('Mutated', $alice->name);
+    }
+
+    public function test_insert_does_not_trigger_composite_validation()
+    {
+        $user = new MisconfiguredTenantUser();
+        $user->id = 'new';
+        $user->tenant_id = 'tx';
+        $user->name = 'X';
+        $user->save();
+
+        $row = Capsule::table('tenant_users')->where('id', 'new')->first();
+        $this->assertNotNull($row);
+        $this->assertSame('X', $row->name);
+    }
+
+    public function test_update_via_mass_assignment_includes_composite_key_in_where()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+
+        $alice = TenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        $alice->update(['name' => 'Alice2']);
+
+        $rows = Capsule::table('tenant_users')->orderBy('tenant_id')->get();
+        $this->assertSame('Alice2', $rows[0]->name);
+        $this->assertSame('Bob', $rows[1]->name);
+    }
+
+    public function test_builder_bulk_update_does_not_inject_composite_key()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+
+        $affected = TenantUser::where('id', 'u1')->update(['name' => 'BulkX']);
+
+        $this->assertSame(2, $affected);
+
+        $rows = Capsule::table('tenant_users')->orderBy('tenant_id')->get();
+        $this->assertSame('BulkX', $rows[0]->name);
+        $this->assertSame('BulkX', $rows[1]->name);
+    }
+
+    public function test_fresh_includes_composite_key_in_where()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+
+        $alice = TenantUser::where('id', 'u1')->where('tenant_id', 't1')->first();
+        Capsule::table('tenant_users')
+            ->where('id', 'u1')
+            ->where('tenant_id', 't1')
+            ->update(['name' => 'FreshlyLoaded']);
+
+        $reloaded = $alice->fresh();
+
+        $this->assertInstanceOf(TenantUser::class, $reloaded);
+        $this->assertSame('FreshlyLoaded', $reloaded->name);
+        $this->assertSame('t1', $reloaded->tenant_id);
+    }
+
+    public function test_force_delete_uses_composite_key_in_where()
+    {
+        Capsule::table('soft_delete_tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice', 'deleted_at' => null],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob', 'deleted_at' => null],
+        ]);
+
+        SoftDeleteTenantUser::where('id', 'u1')->where('tenant_id', 't1')->first()->forceDelete();
+
+        $rows = Capsule::table('soft_delete_tenant_users')->get();
+        $this->assertCount(1, $rows);
+        $this->assertSame('t2', $rows[0]->tenant_id);
+    }
+
+    public function test_restore_uses_composite_key_in_where()
+    {
+        Capsule::table('soft_delete_tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice', 'deleted_at' => '2020-01-01 00:00:00'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob', 'deleted_at' => null],
+        ]);
+
+        SoftDeleteTenantUser::withTrashed()
+            ->where('id', 'u1')
+            ->where('tenant_id', 't1')
+            ->first()
+            ->restore();
+
+        $aliceRow = Capsule::table('soft_delete_tenant_users')->where('id', 'u1')->where('tenant_id', 't1')->first();
+        $bobRow = Capsule::table('soft_delete_tenant_users')->where('id', 'u1')->where('tenant_id', 't2')->first();
+
+        $this->assertNull($aliceRow->deleted_at);
+        $this->assertNull($bobRow->deleted_at);
+    }
+
+    public function test_save_mutates_composite_column_from_null_to_value()
+    {
+        Capsule::table('scoped_users')->insert([
+            ['id' => '1', 'scope_id' => null, 'name' => 'Alice'],
+        ]);
+
+        $alice = ScopedUser::where('id', '1')->whereNull('scope_id')->first();
+        $alice->scope_id = 'x';
+        $alice->save();
+
+        $originalRow = Capsule::table('scoped_users')->where('id', '1')->whereNull('scope_id')->first();
+        $movedRow = Capsule::table('scoped_users')->where('id', '1')->where('scope_id', 'x')->first();
+
+        $this->assertNull($originalRow);
+        $this->assertNotNull($movedRow);
+        $this->assertSame('Alice', $movedRow->name);
+    }
+
+    public function test_save_mutates_composite_column_from_value_to_null()
+    {
+        Capsule::table('scoped_users')->insert([
+            ['id' => '1', 'scope_id' => 'x', 'name' => 'Alice'],
+        ]);
+
+        $alice = ScopedUser::where('id', '1')->where('scope_id', 'x')->first();
+        $alice->scope_id = null;
+        $alice->save();
+
+        $originalRow = Capsule::table('scoped_users')->where('id', '1')->where('scope_id', 'x')->first();
+        $movedRow = Capsule::table('scoped_users')->where('id', '1')->whereNull('scope_id')->first();
+
+        $this->assertNull($originalRow);
+        $this->assertNotNull($movedRow);
+        $this->assertSame('Alice', $movedRow->name);
+    }
+
+    public function test_builder_bulk_delete_does_not_inject_composite_key()
+    {
+        Capsule::table('tenant_users')->insert([
+            ['id' => 'u1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['id' => 'u1', 'tenant_id' => 't2', 'name' => 'Bob'],
+            ['id' => 'u2', 'tenant_id' => 't1', 'name' => 'Carol'],
+        ]);
+
+        $affected = TenantUser::where('id', 'u1')->delete();
+
+        $this->assertSame(2, $affected);
+
+        $rows = Capsule::table('tenant_users')->get();
+        $this->assertCount(1, $rows);
+        $this->assertSame('u2', $rows[0]->id);
+    }
+
+    public function test_non_id_scalar_primary_key_works()
+    {
+        Capsule::table('coded_users')->insert([
+            ['code' => 'c1', 'tenant_id' => 't1', 'name' => 'Alice'],
+            ['code' => 'c1', 'tenant_id' => 't2', 'name' => 'Bob'],
+        ]);
+
+        $alice = CodedUser::where('code', 'c1')->where('tenant_id', 't1')->first();
+        $this->assertSame('c1', $alice->getKey());
+
+        $alice->name = 'Alice2';
+        $alice->save();
+
+        $rows = Capsule::table('coded_users')->orderBy('tenant_id')->get();
+        $this->assertSame('Alice2', $rows[0]->name);
+        $this->assertSame('Bob', $rows[1]->name);
     }
 }

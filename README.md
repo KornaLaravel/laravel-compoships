@@ -281,6 +281,8 @@ If you declare `$compositeKey` on a model whose array does not contain the value
 
 If you mutate a discriminator column in memory before calling `save()` (for example, `$user->tenant_id = $newTenant`), the UPDATE still targets the row as it exists in storage. The WHERE clause uses the original raw value from `$model->original`, then the SET clause writes the new value.
 
+Nullable composite-key columns are supported. When the original raw value of a column is `null`, the trait emits `WHERE column IS NULL` rather than binding `null` into a `=` predicate (which SQL evaluates as never-true). This makes `$compositeKey` safe to use as a composite scoping key for tables that use a `UNIQUE(...)` index with a nullable discriminator rather than a strict composite primary key.
+
 #### Note for consumers with their own override
 
 If your model already overrides `setKeysForSaveQuery()` or `setKeysForSelectQuery()`, call `parent::setKeysForSaveQuery($query)` (and the select equivalent) first to inherit the composite key handling. Without `parent::`, the override loses the composite WHERE silently.

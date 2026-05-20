@@ -87,7 +87,13 @@ trait Compoships
         $query = parent::setKeysForSaveQuery($query);
 
         foreach ($this->getAdditionalKeyNames() as $column) {
-            $query->where($column, '=', $this->getRawOriginal($column) ?? $this->getAttribute($column));
+            $value = array_key_exists($column, $this->original)
+                ? $this->original[$column]
+                : $this->getAttribute($column);
+
+            $value === null
+                ? $query->whereNull($column)
+                : $query->where($column, '=', $value);
         }
 
         return $query;
@@ -108,7 +114,13 @@ trait Compoships
         $query = parent::setKeysForSelectQuery($query);
 
         foreach ($this->getAdditionalKeyNames() as $column) {
-            $query->where($column, '=', $this->getRawOriginal($column) ?? $this->getAttribute($column));
+            $value = array_key_exists($column, $this->original)
+                ? $this->original[$column]
+                : $this->getAttribute($column);
+
+            $value === null
+                ? $query->whereNull($column)
+                : $query->where($column, '=', $value);
         }
 
         return $query;
