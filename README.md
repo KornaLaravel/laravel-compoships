@@ -279,7 +279,33 @@ The following operations are **not** affected. They remain identical to stock El
 
 Queue serialization (via `Illuminate\Queue\SerializesModels`, used by queueable jobs, events, and notifications) participates in composite handling for **single-model** properties on the job: `getQueueableId()` returns a JSON-encoded array of the composite key columns, and `newQueryForRestoration()` decodes it back into a query that scopes by every key column on the worker side. Round-tripping a single composite-keyed model through the queue reloads the exact composite row that was queued. Old queued payloads predating this feature (with a scalar id) continue to restore via the parent path, so no queue drain is required on upgrade.
 
-**Collection round-trip is not supported.** If a job property is an `Illuminate\Database\Eloquent\Collection` of composite-keyed models, the restored Collection will be empty on the worker. The cause is in Laravel's `restoreCollection`: it re-keys loaded models by scalar `getKey()` and looks up by the original queued ids (our JSON-encoded composite strings), so the lookup keys never match. This cannot be fixed from this package without overriding `getKey()` globally, which would break `find()`, route binding, `associate()`, and many other internal Eloquent paths. As a workaround, queue the scalar primary keys (or composite tuples as raw arrays) on the job and reload the models inside the job handler.
+**Collection round-trip requires the `QueueableCompositeCollection` wrapper.** A raw `Illuminate\Database\Eloquent\Collection` of composite-keyed models on a job property will restore as an empty collection. The cause is in Laravel's `restoreCollection`: it re-keys loaded models by scalar `getKey()` and looks up by the original queued ids (our JSON-encoded composite strings), so the lookup keys never match. The package ships a wrapper class that sidesteps the issue by capturing composite-key tuples at queue time and rebuilding the collection via composite-aware query at restore time:
+
+```php
+use Awobaz\Compoships\Queue\QueueableCompositeCollection;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Queue\SerializesModels;
+
+class ProcessUsers
+{
+    use SerializesModels;
+
+    public QueueableCompositeCollection $users;
+
+    public function __construct(Collection $users)
+    {
+        $this->users = QueueableCompositeCollection::for($users);
+    }
+
+    public function handle(): void
+    {
+        $users = $this->users->restore();
+        // ...
+    }
+}
+```
+
+The wrapper preserves the original collection order, eager-loaded relations, and the model's connection. It rejects mixed-class collections (throws `LogicException`) and misconfigured `$compositeKey` declarations (throws `InvalidUsageException`) at wrap time. The wrapper is opaque to `SerializesModels`, so PHP's standard serialization captures its state directly. Each call to `restore()` issues one database query.
 
 If you declare `$compositeKey` on a model whose array does not contain the value of `$primaryKey`, the trait throws `Awobaz\Compoships\Exceptions\InvalidUsageException` on the first save, delete, or refresh. The array must enumerate the whole primary key.
 

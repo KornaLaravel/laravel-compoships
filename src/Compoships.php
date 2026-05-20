@@ -86,7 +86,7 @@ trait Compoships
      *
      * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
      */
-    protected function getCompositeKeyValues()
+    public function getCompositeKeyValues()
     {
         if (! property_exists($this, 'compositeKey') || empty($this->compositeKey)) {
             return null;
