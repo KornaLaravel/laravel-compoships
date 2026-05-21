@@ -58,11 +58,11 @@ trait Compoships
      */
     protected function getAdditionalKeyNames()
     {
-        if (! property_exists($this, 'compositeKey') || empty($this->compositeKey)) {
+        if (!property_exists($this, 'compositeKey') || empty($this->compositeKey)) {
             return [];
         }
 
-        if (! in_array($this->getKeyName(), $this->compositeKey, true)) {
+        if (!in_array($this->getKeyName(), $this->compositeKey, true)) {
             throw new InvalidUsageException(sprintf(
                 'Model %s declares $compositeKey but does not include the scalar primary key "%s". Add it to $compositeKey or remove $compositeKey entirely.',
                 static::class,
@@ -88,11 +88,11 @@ trait Compoships
      */
     public function getCompositeKeyValues()
     {
-        if (! property_exists($this, 'compositeKey') || empty($this->compositeKey)) {
+        if (!property_exists($this, 'compositeKey') || empty($this->compositeKey)) {
             return null;
         }
 
-        if (! in_array($this->getKeyName(), $this->compositeKey, true)) {
+        if (!in_array($this->getKeyName(), $this->compositeKey, true)) {
             throw new InvalidUsageException(sprintf(
                 'Model %s declares $compositeKey but does not include the scalar primary key "%s". Add it to $compositeKey or remove $compositeKey entirely.',
                 static::class,
@@ -151,7 +151,7 @@ trait Compoships
      */
     public function newQueryForRestoration($ids)
     {
-        if (is_string($ids) && property_exists($this, 'compositeKey') && ! empty($this->compositeKey)) {
+        if (is_string($ids) && property_exists($this, 'compositeKey') && !empty($this->compositeKey)) {
             $decoded = json_decode($ids, true);
 
             if (is_array($decoded)

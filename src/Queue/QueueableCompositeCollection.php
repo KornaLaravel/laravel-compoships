@@ -45,7 +45,7 @@ class QueueableCompositeCollection
      *
      * @param \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $models
      *
-     * @throws \LogicException When the collection contains models of more than one class.
+     * @throws \LogicException                                     When the collection contains models of more than one class.
      * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException When any model's $compositeKey omits the scalar primary key.
      *
      * @return self
@@ -112,7 +112,7 @@ class QueueableCompositeCollection
             }
         });
 
-        if (! empty($this->relations)) {
+        if (!empty($this->relations)) {
             $query->with($this->relations);
         }
 
