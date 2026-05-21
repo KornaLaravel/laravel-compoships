@@ -23,12 +23,12 @@ class QueueableCompositeCollectionTypeMismatchTest extends TestCase
         $model->name = 'Alice';
         $model->exists = true;
         // make sure tenant_id is not in $casts
-        
+
         $collection = new Collection([$model]);
         $bag = QueueableCompositeCollection::for($collection);
 
         $restored = $bag->restore();
-        
+
         $this->assertCount(1, $restored);
     }
 }
