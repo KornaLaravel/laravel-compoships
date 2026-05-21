@@ -52,9 +52,9 @@ trait Compoships
      * on the trait so consumers can pick their own default value without
      * triggering PHP's "trait property re-declaration" incompatibility.
      *
-     * @return array<int, string>
-     *
      * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     *
+     * @return array<int, string>
      */
     protected function getAdditionalKeyNames()
     {
@@ -82,9 +82,9 @@ trait Compoships
      * original). This matches Laravel's stock getQueueableId semantic
      * that queue serialization captures the model's current identity.
      *
-     * @return array<string, mixed>|null
-     *
      * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     *
+     * @return array<string, mixed>|null
      */
     public function getCompositeKeyValues()
     {
@@ -115,9 +115,9 @@ trait Compoships
      * id out of Laravel's restoreCollection branch, which fires on
      * is_array($id) and is intended for EloquentCollection round-trip.
      *
-     * @return mixed
-     *
      * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     *
+     * @return mixed
      */
     public function getQueueableId()
     {
@@ -145,7 +145,8 @@ trait Compoships
      * is not viable because getKey() is used by find, route binding,
      * associate, and many other internal paths).
      *
-     * @param  mixed  $ids
+     * @param mixed $ids
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function newQueryForRestoration($ids)
@@ -175,10 +176,11 @@ trait Compoships
      * Set the keys for a save UPDATE / DELETE query, including any
      * additional composite-key columns declared via $compositeKey.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @param \Illuminate\Database\Eloquent\Builder $query
      *
      * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     *
+     * @return \Illuminate\Database\Eloquent\Builder
      */
     protected function setKeysForSaveQuery($query)
     {
@@ -202,10 +204,11 @@ trait Compoships
      * including any additional composite-key columns declared via
      * $compositeKey.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @param \Illuminate\Database\Eloquent\Builder $query
      *
      * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     *
+     * @return \Illuminate\Database\Eloquent\Builder
      */
     protected function setKeysForSelectQuery($query)
     {

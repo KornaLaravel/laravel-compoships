@@ -21,7 +21,8 @@
     "ext-sqlite3": "*",
     "fakerphp/faker": "^1.18",
     "illuminate/queue": "^12.0|^13.0",
-    "phpunit/phpunit": "^11.0|^12.0"
+    "phpunit/phpunit": "^11.0|^12.0",
+    "laravel/pint": "^1.29"
   },
   "autoload": {
     "psr-4": {

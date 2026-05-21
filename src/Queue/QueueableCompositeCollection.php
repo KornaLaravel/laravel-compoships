@@ -43,11 +43,12 @@ class QueueableCompositeCollection
     /**
      * Build a bag from a collection of composite-keyed models.
      *
-     * @param  \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model>  $models
-     * @return self
+     * @param \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $models
      *
      * @throws \LogicException When the collection contains models of more than one class.
      * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException When any model's $compositeKey omits the scalar primary key.
+     *
+     * @return self
      */
     public static function for(EloquentCollection $models)
     {
@@ -122,7 +123,8 @@ class QueueableCompositeCollection
      * Build an output collection ordered to match the original tuple
      * order, using a JSON-encoded tuple key to look up each loaded model.
      *
-     * @param  \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model>  $loaded
+     * @param \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model> $loaded
+     *
      * @return \Illuminate\Database\Eloquent\Collection<int, \Illuminate\Database\Eloquent\Model>
      */
     protected function orderedByOriginalTuples(EloquentCollection $loaded)
@@ -161,7 +163,8 @@ class QueueableCompositeCollection
      * (e.g., int 1 in memory vs. string "1" returned by PDO for an
      * uncasted column) does not cause the lookup to miss.
      *
-     * @param  array<string, mixed>  $tuple
+     * @param array<string, mixed> $tuple
+     *
      * @return string
      */
     protected function canonicalKey(array $tuple)
@@ -183,7 +186,8 @@ class QueueableCompositeCollection
      * string) are stringified. Non-scalar non-enum values pass through
      * unchanged so that json_encode's default behavior applies.
      *
-     * @param  mixed  $value
+     * @param mixed $value
+     *
      * @return mixed
      */
     protected function normalizeValueForKey($value)
