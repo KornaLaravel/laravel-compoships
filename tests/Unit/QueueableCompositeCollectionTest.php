@@ -136,6 +136,26 @@ class QueueableCompositeCollectionTest extends TestCase
         $this->assertSame(['first', 'second'], $reloaded[0]->notes->pluck('note')->sort()->values()->all());
     }
 
+    public function test_canonical_key_handles_type_mismatched_composite_columns()
+    {
+        $alice = new TenantUser();
+        $alice->id = 'u1';
+        $alice->tenant_id = 1;
+        $alice->name = 'Alice';
+        $alice->save();
+
+        $this->assertIsInt($alice->tenant_id, 'precondition: in-memory tenant_id must be an integer');
+
+        $bag = QueueableCompositeCollection::for(new EloquentCollection([$alice]));
+        $reloaded = unserialize(serialize($bag))->restore();
+
+        $reloadedFresh = TenantUser::where('id', 'u1')->first();
+        $this->assertIsString($reloadedFresh->tenant_id, 'precondition: PDO returns the column as string');
+
+        $this->assertCount(1, $reloaded, 'restore must not drop the model when the in-memory type differs from the PDO-returned type');
+        $this->assertSame('Alice', $reloaded[0]->name);
+    }
+
     public function test_three_column_composite_key_roundtrip()
     {
         Capsule::table('three_col_users')->insert([

@@ -156,13 +156,54 @@ class QueueableCompositeCollection
 
     /**
      * Canonical JSON encoding of a composite-key tuple, used as a map
-     * key for ordering on restore.
+     * key for ordering on restore. Scalar values are normalized to
+     * string form before encoding so that PHP-side type variance
+     * (e.g., int 1 in memory vs. string "1" returned by PDO for an
+     * uncasted column) does not cause the lookup to miss.
      *
      * @param  array<string, mixed>  $tuple
      * @return string
      */
     protected function canonicalKey(array $tuple)
     {
-        return json_encode($tuple);
+        $normalized = [];
+
+        foreach ($tuple as $column => $value) {
+            $normalized[$column] = $this->normalizeValueForKey($value);
+        }
+
+        return json_encode($normalized);
+    }
+
+    /**
+     * Coerce a tuple value into a canonical form for use as a lookup
+     * map key. Null is preserved as null (distinct from any scalar).
+     * BackedEnum values are reduced to their backing scalar as string.
+     * Booleans are normalized to "1"/"0". Other scalars (int, float,
+     * string) are stringified. Non-scalar non-enum values pass through
+     * unchanged so that json_encode's default behavior applies.
+     *
+     * @param  mixed  $value
+     * @return mixed
+     */
+    protected function normalizeValueForKey($value)
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if ($value instanceof \BackedEnum) {
+            return (string) $value->value;
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        if (is_int($value) || is_float($value) || is_string($value)) {
+            return (string) $value;
+        }
+
+        return $value;
     }
 }
