@@ -213,5 +213,56 @@ class Migration extends BaseMigration
             $table->integer('right_division_id')->unsigned();
             $table->timestamps();
         });
+
+        Capsule::schema()->create('tenant_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('tenant_id');
+            $table->string('name')->nullable();
+            $table->primary(['id', 'tenant_id']);
+        });
+
+        Capsule::schema()->create('three_col_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('tenant_id');
+            $table->string('region_id');
+            $table->string('name')->nullable();
+            $table->primary(['id', 'tenant_id', 'region_id']);
+        });
+
+        Capsule::schema()->create('soft_delete_tenant_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('tenant_id');
+            $table->string('name')->nullable();
+            $table->softDeletes();
+            $table->primary(['id', 'tenant_id']);
+        });
+
+        Capsule::schema()->create('enum_tenant_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('tenant_id');
+            $table->string('name')->nullable();
+            $table->primary(['id', 'tenant_id']);
+        });
+
+        Capsule::schema()->create('scoped_users', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('scope_id')->nullable();
+            $table->string('name')->nullable();
+            $table->unique(['id', 'scope_id']);
+        });
+
+        Capsule::schema()->create('coded_users', function (Blueprint $table) {
+            $table->string('code');
+            $table->string('tenant_id');
+            $table->string('name')->nullable();
+            $table->primary(['code', 'tenant_id']);
+        });
+
+        Capsule::schema()->create('tenant_user_notes', function (Blueprint $table) {
+            $table->increments('id');
+            $table->string('tenant_user_id');
+            $table->string('tenant_id');
+            $table->string('note');
+        });
     }
 }
