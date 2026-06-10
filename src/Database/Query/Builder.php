@@ -23,9 +23,12 @@ class Builder extends BaseQueryBuilder
         if (is_array($column)) {
             $inOperator = $not ? 'NOT IN' : 'IN';
             $prefix = $this->getConnection()->getTablePrefix();
+            $grammar = $this->getConnection()->getQueryGrammar();
 
             foreach ($column as &$value) {
-                $value = $prefix.$value;
+                if (!$grammar->isExpression($value)) {
+                    $value = $prefix.$value;
+                }
             }
 
             if ($this->getConnection()->getDriverName() === 'sqlsrv') {
@@ -38,8 +41,11 @@ class Builder extends BaseQueryBuilder
 
                 return $this;
             }
-
-            $columns = implode(',', $column);
+            
+            $columns = implode(',', array_map(
+                fn ($v) => $grammar->isExpression($v) ? $v->getValue($grammar) : $v,
+                $column
+            ));
             $tuplePlaceholders = '('.implode(', ', array_fill(0, count($column), '?')).')';
             $placeholderList = implode(',', array_fill(0, count($values), $tuplePlaceholders));
 

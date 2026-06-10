@@ -256,6 +256,52 @@ class HasManyTest extends TestCase
     /**
      * @covers \Awobaz\Compoships\Database\Query\Builder::whereIn
      */
+    public function test_Compoships_eagerLoading_using_expression()
+    {
+        $allocationId1 = Capsule::table('allocations')->insertGetId([
+            'booking_id' => 2,
+            'vehicle_id' => 2,
+        ]);
+        $allocationId2 = Capsule::table('allocations')->insertGetId([
+            'booking_id' => 1,
+            'vehicle_id' => 1,
+        ]);
+        Capsule::table('tracking_tasks')->insertGetId([
+            'booking_id' => 1,
+            'vehicle_id' => 1,
+            'created_at' => Carbon::now()
+                ->toDateTimeString(),
+            'updated_at' => Carbon::now()
+                ->toDateTimeString(),
+            'deleted_at' => null,
+        ]);
+
+        Capsule::connection()->enableQueryLog();
+        $allocations1 = Allocation::where('id', $allocationId1)->with('trackingTasksWithRaw')->get()->all();
+        $allocations2 = Allocation::where('id', $allocationId2)->with('trackingTasksWithRaw')->get()->all();
+        $queries = Capsule::connection()->getQueryLog();
+        Capsule::connection()->disableQueryLog();
+
+        $this->assertSame(
+            'select * from "tracking_tasks" where (tracking_tasks.booking_id,("tracking_tasks" . "vehicle_id" /*test*/)) IN ((?, ?)) and "tracking_tasks"."deleted_at" is null',
+            last($queries)['query'],
+        );
+        $this->assertSame(
+            'select * from "tracking_tasks" where "tracking_tasks"."booking_id" = ? and ("tracking_tasks" . "vehicle_id" /*test*/) = ? and "tracking_tasks"."deleted_at" is null',
+            $allocations2[0]->trackingTasksWithRaw()->toSql(),
+        );
+
+        $this->assertCount(1, $allocations2);
+        $this->assertCount(1, $allocations2[0]->trackingTasks);
+        $this->assertEquals(1, $allocations2[0]->trackingTasks[0]->id);
+
+        $this->assertCount(1, $allocations1);
+        $this->assertCount(0, $allocations1[0]->trackingTasks);
+    }
+
+    /**
+     * @covers \Awobaz\Compoships\Database\Query\Builder::whereIn
+     */
     public function test_Illuminate_eagerLoading()
     {
         $allocationId1 = Capsule::table('allocations')->insertGetId([

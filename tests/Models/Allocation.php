@@ -6,6 +6,7 @@ use Awobaz\Compoships\Compoships;
 use Awobaz\Compoships\Tests\Factories\AllocationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Expression;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -40,6 +41,14 @@ class Allocation extends Model
     public function trackingTasks()
     {
         return $this->hasMany(TrackingTask::class, ['booking_id', 'vehicle_id'], ['booking_id', 'vehicle_id']);
+    }
+
+    /**
+     * @return \Awobaz\Compoships\Database\Eloquent\Relations\HasMany
+     */
+    public function trackingTasksWithRaw()
+    {
+        return $this->hasMany(TrackingTask::class, ['booking_id', new Expression('("tracking_tasks" . "vehicle_id" /*test*/)')], ['booking_id', 'vehicle_id']);
     }
 
     /**
