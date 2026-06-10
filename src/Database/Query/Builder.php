@@ -42,7 +42,7 @@ class Builder extends BaseQueryBuilder
 
                 return $this;
             }
-            
+
             $columns = implode(', ', array_map(
                 fn ($v) => $grammar->isExpression($v) ? $v->getValue($grammar) : $grammar->wrap($v),
                 $column

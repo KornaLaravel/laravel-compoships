@@ -120,6 +120,7 @@ trait HasOneOrMany
 
         if (is_array($key)) { //Check for multi-columns relationship
             $grammar = $this->getConnection()->getQueryGrammar();
+
             return array_map(fn ($k) => last(explode('.', $grammar->isExpression($k) ? $k->getValue($grammar) : $k)), $key);
         } else {
             return last(explode('.', $key));
