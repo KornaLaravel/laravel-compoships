@@ -4,6 +4,7 @@ namespace Awobaz\Compoships\Database\Query;
 
 use Illuminate\Database\Query\Builder as BaseQueryBuilder;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 
 class Builder extends BaseQueryBuilder
 {
@@ -26,7 +27,7 @@ class Builder extends BaseQueryBuilder
             $grammar = $this->getConnection()->getQueryGrammar();
 
             foreach ($column as &$value) {
-                if (!$grammar->isExpression($value)) {
+                if (!$grammar->isExpression($value) && !Str::contains($value, '.')) {
                     $value = $prefix.$value;
                 }
             }
@@ -42,12 +43,12 @@ class Builder extends BaseQueryBuilder
                 return $this;
             }
             
-            $columns = implode(',', array_map(
-                fn ($v) => $grammar->isExpression($v) ? $v->getValue($grammar) : $v,
+            $columns = implode(', ', array_map(
+                fn ($v) => $grammar->isExpression($v) ? $v->getValue($grammar) : $grammar->wrap($v),
                 $column
             ));
             $tuplePlaceholders = '('.implode(', ', array_fill(0, count($column), '?')).')';
-            $placeholderList = implode(',', array_fill(0, count($values), $tuplePlaceholders));
+            $placeholderList = implode(', ', array_fill(0, count($values), $tuplePlaceholders));
 
             $this->whereRaw("({$columns}) {$inOperator} ({$placeholderList})", Arr::flatten($values), $boolean);
 

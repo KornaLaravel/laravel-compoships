@@ -318,7 +318,7 @@ trait HasRelationships
         $grammar = $this->getConnection()
             ->getQueryGrammar();
 
-        return $grammar->isExpression($foreignKey)
+        return $grammar->isExpression($foreignKey) || Str::contains($foreignKey, '.')
             ? $foreignKey
             : $instance->getTable().'.'.$foreignKey;
     }

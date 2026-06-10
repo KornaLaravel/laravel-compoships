@@ -54,6 +54,14 @@ class Allocation extends Model
     /**
      * @return \Awobaz\Compoships\Database\Eloquent\Relations\HasMany
      */
+    public function trackingTasksWithPrefixedField()
+    {
+        return $this->hasMany(TrackingTask::class, ['booking_id', 'tracking_tasks.vehicle_id'], ['booking_id', 'vehicle_id']);
+    }
+
+    /**
+     * @return \Awobaz\Compoships\Database\Eloquent\Relations\HasMany
+     */
     public function originalPackages()
     {
         $hasMany = $this->hasMany(OriginalPackage::class);
