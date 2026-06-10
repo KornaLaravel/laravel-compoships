@@ -11,4 +11,6 @@
 /.php_cs.dist.php   export-ignore
 /phpunit.xml.dist   export-ignore
 /CONTRIBUTING.md    export-ignore
+/TODO.md            export-ignore
 /tests              export-ignore
+/run-matrix-tests.sh export-ignore
