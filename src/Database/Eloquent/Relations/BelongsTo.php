@@ -231,7 +231,7 @@ class BelongsTo extends BaseBelongsTo
 
                 $dictionary[implode('-', $dictKeyValues)] = $result;
             } else {
-                $dictionary[$result->getAttribute($owner)] = $result;
+                $dictionary[$result->getAttribute($owner) ?? ''] = $result;
             }
         }
 
@@ -244,7 +244,7 @@ class BelongsTo extends BaseBelongsTo
 
                 $key = implode('-', $dictKeyValues);
             } else {
-                $key = $model->{$foreign};
+                $key = $model->{$foreign} ?? '';
             }
 
             if (isset($dictionary[$key])) {

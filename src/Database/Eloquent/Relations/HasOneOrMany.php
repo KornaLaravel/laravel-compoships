@@ -219,7 +219,7 @@ trait HasOneOrMany
             //And we join the values to construct the dictionary key
             $dictKey = is_array($key)
                 ? implode('-', array_map(fn ($v) => $this->resolveBackedEnumValue($v), $key))
-                : $key;
+                : ($key ?? '');
 
             if (isset($dictionary[$dictKey])) {
                 $related = $this->getRelationValue($dictionary, $dictKey, $type);
@@ -262,7 +262,7 @@ trait HasOneOrMany
                 //... so we join the values to construct the dictionary key
                 $dictionary[implode('-', $dictKeyValues)][] = $result;
             } else {
-                $dictionary[$result->{$foreign}][] = $result;
+                $dictionary[$result->{$foreign} ?? ''][] = $result;
             }
         }
 
