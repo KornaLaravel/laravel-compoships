@@ -550,23 +550,29 @@ class BelongsToMany extends BaseBelongsToMany
     }
 
     /**
-     * Normalize a sync/toggle records map so all entries are keyed by the
-     * canonical JSON-encoded composite tuple matching `relatedPivotKey`.
+     * Normalize a sync/toggle records map into canonical composite entries:
+     *
+     *   [canonicalKey => ['tuple' => array, 'attributes' => array]]
      *
      * Accepts entries whose key is either:
-     *   - already a JSON-encoded tuple of matching arity (passed through), or
+     *   - a JSON-encoded tuple of matching arity (decoded and re-serialized
+     *     canonically, so key formatting and scalar types cannot affect
+     *     matching), or
      *   - a scalar id (UUID, string, int) that fills `relatedPivotKey[0]`. The
      *     remaining composite columns are looked up first in the per-row attrs,
      *     then in the parent's matching `parentKey` column (for shared columns
      *     like `sem_id` that span both pivot sides).
      *
-     * Without this normalization, `array_diff` against the JSON-encoded result
-     * of `getCurrentPivotKeys()` would never match scalar-keyed entries, so
-     * sync would mistakenly detach every existing pivot row.
+     * The canonical key (see `serializeCompositeKey`) makes the set operations
+     * against `getCurrentPivotKeys()` type-agnostic, while the stored tuple
+     * preserves the caller's values for attach payloads and the returned
+     * change sets. Without both, a driver returning key columns with a
+     * different scalar type than the caller supplied (e.g. int read back as
+     * string) would classify already-attached rows as "to detach".
      *
      * @param array $records
      *
-     * @return array
+     * @return array<string, array{tuple: array, attributes: array}>
      */
     protected function normalizeRecordKeys(array $records): array
     {
@@ -579,17 +585,43 @@ class BelongsToMany extends BaseBelongsToMany
         foreach ($records as $key => $attrs) {
             $attributes = is_array($attrs) ? $attrs : [];
 
-            if (is_string($key) && $this->decodeCompositeKey($key) !== null) {
-                $normalized[$key] = $attributes;
-                continue;
+            $tuple = $this->decodeCompositeKey($key);
+
+            if ($tuple === null) {
+                $tuple = $this->buildCompositeTupleFromScalar($key, $attributes);
             }
 
-            $tuple = $this->buildCompositeTupleFromScalar($key, $attributes);
+            $tuple = array_map(fn ($value) => $this->resolveBackedEnumValue($value), array_values($tuple));
 
-            $normalized[json_encode($tuple)] = $attributes;
+            $normalized[$this->serializeCompositeKey($tuple)] = [
+                'tuple'      => $tuple,
+                'attributes' => $attributes,
+            ];
         }
 
         return $normalized;
+    }
+
+    /**
+     * Serialize a composite tuple to its canonical comparison key.
+     *
+     * Backed enums are resolved to their backing scalar and every non-null
+     * component is cast to string before encoding, so a key built from caller
+     * input compares equal to a key built from driver results whenever the
+     * components are equal by value (int 1 matches string '1'). Null is kept
+     * as JSON null so it can never collide with an empty-string component.
+     *
+     * @param array $tuple
+     *
+     * @return string
+     */
+    protected function serializeCompositeKey(array $tuple): string
+    {
+        return json_encode(array_map(function ($value) {
+            $value = $this->resolveBackedEnumValue($value);
+
+            return $value === null ? null : (string) $value;
+        }, array_values($tuple)));
     }
 
     /**
@@ -769,7 +801,7 @@ class BelongsToMany extends BaseBelongsToMany
 
         return $this->newPivotQuery()->whereIn(
             $this->qualifyPivotColumn($this->relatedPivotKey),
-            $this->wrapAsTupleList($id)
+            $this->normalizeTupleList($id)
         );
     }
 
@@ -806,6 +838,43 @@ class BelongsToMany extends BaseBelongsToMany
     }
 
     /**
+     * Normalize a detach/update `$ids` argument into an arity-validated list
+     * of composite tuples for a `whereIn(<column tuple>, ...)` clause.
+     *
+     * Runs `parseIds` (Model/Collection extraction) and `wrapAsTupleList`
+     * (shape normalization), then rejects any tuple whose arity does not
+     * match `relatedPivotKey`. Without this guard a malformed tuple expands
+     * into a placeholder/binding count mismatch: silently wrong on SQLite
+     * (unbound placeholders become NULL) and a hard protocol error on
+     * PostgreSQL (SQLSTATE 08P01).
+     *
+     * @param mixed $ids
+     *
+     * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     *
+     * @return array<int, array>
+     */
+    protected function normalizeTupleList($ids): array
+    {
+        $tuples = $this->wrapAsTupleList($this->parseIds($ids));
+
+        $arity = count($this->relatedPivotKey);
+
+        foreach ($tuples as $tuple) {
+            if (!is_array($tuple) || count($tuple) !== $arity) {
+                throw new InvalidUsageException(sprintf(
+                    'Composite-key tuple %s does not match the relation arity %d (relatedPivotKey columns: %s).',
+                    var_export($tuple, true),
+                    $arity,
+                    implode(', ', $this->relatedPivotKey)
+                ));
+            }
+        }
+
+        return $tuples;
+    }
+
+    /**
      * Detach models from the relationship.
      *
      * @param mixed $ids
@@ -830,10 +899,7 @@ class BelongsToMany extends BaseBelongsToMany
             $query = $this->newPivotQuery();
 
             if (!is_null($ids)) {
-                // parseIds first to extract composite tuples from Model/Collection
-                // inputs, then wrapAsTupleList to ensure the result is a list of
-                // tuples for the `whereIn(<column tuple>, [[...], ...])` clause.
-                $ids = $this->wrapAsTupleList($this->parseIds($ids));
+                $ids = $this->normalizeTupleList($ids);
 
                 if (empty($ids)) {
                     return 0;
@@ -893,11 +959,17 @@ class BelongsToMany extends BaseBelongsToMany
             return parent::getCurrentlyAttachedPivotsForIds($ids);
         }
 
+        $tuples = is_null($ids) ? null : $this->normalizeTupleList($ids);
+
+        if ($tuples === []) {
+            return new SupportCollection();
+        }
+
         return $this->newPivotQuery()
-            ->when(!is_null($ids), function ($query) use ($ids) {
+            ->when(!is_null($tuples), function ($query) use ($tuples) {
                 return $query->whereIn(
                     $this->qualifyPivotColumn($this->relatedPivotKey),
-                    $this->parseIds($ids)
+                    $tuples
                 );
             })
             ->get()
@@ -969,14 +1041,12 @@ class BelongsToMany extends BaseBelongsToMany
         $current = $this->getCurrentPivotKeys();
 
         if ($detaching) {
-            $detach = array_diff($current, array_keys($records));
+            $detach = array_values(array_diff_key($current, $records));
 
             if (count($detach) > 0) {
-                $detachValues = array_values($detach);
+                $this->detach($detach, false);
 
-                $this->detach($this->decodeJsonKeys($detachValues), false);
-
-                $changes['detached'] = $this->decodeJsonKeys($detachValues);
+                $changes['detached'] = $detach;
             }
         }
 
@@ -1017,22 +1087,22 @@ class BelongsToMany extends BaseBelongsToMany
         );
         $current = $this->getCurrentPivotKeys();
 
-        $detach = array_values(array_intersect($current, array_keys($records)));
+        $detach = array_values(array_intersect_key($current, $records));
 
         if (count($detach) > 0) {
-            $this->detach($this->decodeJsonKeys($detach), false);
+            $this->detach($detach, false);
 
-            $changes['detached'] = $this->decodeJsonKeys($detach);
+            $changes['detached'] = $detach;
         }
 
-        $attach = array_diff_key($records, array_flip($detach));
+        $attach = array_diff_key($records, $current);
 
         if (count($attach) > 0) {
-            foreach ($attach as $serializedId => $attributes) {
-                $this->attach([json_decode($serializedId, true)], $attributes, false);
+            foreach ($attach as $record) {
+                $this->attach([$record['tuple']], $record['attributes'], false);
             }
 
-            $changes['attached'] = $this->decodeJsonKeys(array_keys($attach));
+            $changes['attached'] = array_column($attach, 'tuple');
         }
 
         if ($touch && (count($changes['attached']) || count($changes['detached']))) {
@@ -1059,16 +1129,14 @@ class BelongsToMany extends BaseBelongsToMany
 
         $changes = ['attached' => [], 'updated' => []];
 
-        foreach ($records as $id => $attributes) {
-            $tuple = json_decode($id, true);
+        foreach ($records as $key => $record) {
+            if (!array_key_exists($key, $current)) {
+                $this->attach([$record['tuple']], $record['attributes'], $touch);
 
-            if (!in_array($id, $current)) {
-                $this->attach([$tuple], $attributes, $touch);
-
-                $changes['attached'][] = $tuple;
-            } elseif (count($attributes) > 0 &&
-                $this->updateExistingPivot($tuple, $attributes, $touch)) {
-                $changes['updated'][] = $tuple;
+                $changes['attached'][] = $record['tuple'];
+            } elseif (count($record['attributes']) > 0 &&
+                $this->updateExistingPivot($current[$key], $record['attributes'], $touch)) {
+                $changes['updated'][] = $record['tuple'];
             }
         }
 
@@ -1114,9 +1182,13 @@ class BelongsToMany extends BaseBelongsToMany
     }
 
     /**
-     * Get the serialized keys of currently attached pivots.
+     * Get the currently attached composite keys, keyed by their canonical
+     * serialized form (see `serializeCompositeKey`) with the raw database
+     * tuple as value. The canonical key makes set operations against the
+     * requested records type-agnostic; the raw tuple is what detach queries
+     * and the `detached` change set report.
      *
-     * @return array
+     * @return array<string, array>
      */
     protected function getCurrentPivotKeys(): array
     {
@@ -1124,9 +1196,15 @@ class BelongsToMany extends BaseBelongsToMany
             $this->qualifyPivotColumn($this->relatedPivotKey)
         );
 
-        return $pivots->map(fn ($record) => json_encode(
-            array_map(fn ($k) => $record->{$k}, $this->relatedPivotKey)
-        ))->all();
+        $current = [];
+
+        foreach ($pivots as $record) {
+            $tuple = array_map(fn ($k) => $record->{$k}, $this->relatedPivotKey);
+
+            $current[$this->serializeCompositeKey($tuple)] = $tuple;
+        }
+
+        return $current;
     }
 
     /**
