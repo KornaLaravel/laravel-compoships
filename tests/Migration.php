@@ -156,6 +156,17 @@ class Migration extends BaseMigration
             $table->timestamps();
         });
 
+        // Same shape as project_team but without a surrogate id column, so
+        // pivot update/delete queries must locate rows by the composite keys
+        // alone (the conventional Laravel pivot table layout).
+        Capsule::schema()->create('project_team_no_id', function (Blueprint $table) {
+            $table->string('team_region_code');
+            $table->integer('team_division_id')->unsigned();
+            $table->string('project_region_code');
+            $table->integer('project_division_id')->unsigned();
+            $table->string('role')->nullable();
+        });
+
         // Pivot table for asymmetric belongsToMany tests:
         //   User (scalar PK 'id')  <->  Project (composite key 'region_code, division_id')
         // Used by both User::projects() and Project::users() to verify both

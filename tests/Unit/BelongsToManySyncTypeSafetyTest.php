@@ -230,6 +230,42 @@ class BelongsToManySyncTypeSafetyTest extends TestCase
         );
     }
 
+    public function test_sync_update_targets_row_by_composite_key_on_pivot_table_without_surrogate_id()
+    {
+        $team = $this->createTeam('US', 1, 'Alpha');
+        $this->createProject('US', 1, 'Website');
+        $this->createProject('EU', 2, 'API');
+        $team->projectsWithPivotModelNoId()->attach([['US', 1], ['EU', 2]], ['role' => 'old']);
+
+        Capsule::connection()->enableQueryLog();
+        $changes = $team->projectsWithPivotModelNoId()->sync([
+            json_encode(['US', '1']) => ['role' => 'new'],
+            ['EU', 2],
+        ]);
+
+        $this->assertCount(0, $changes['attached']);
+        $this->assertCount(0, $changes['detached']);
+        $this->assertCount(1, $changes['updated']);
+        $this->assertSame('new', Capsule::table('project_team_no_id')->where('project_region_code', 'US')->value('role'));
+        $this->assertSame('old', Capsule::table('project_team_no_id')->where('project_region_code', 'EU')->value('role'));
+        $this->assertSame(2, Capsule::table('project_team_no_id')->count());
+        $this->assertNoBindingMismatch();
+    }
+
+    public function test_detach_deletes_row_by_composite_key_on_pivot_table_without_surrogate_id()
+    {
+        $team = $this->createTeam('US', 1, 'Alpha');
+        $this->createProject('US', 1, 'Website');
+        $this->createProject('EU', 2, 'API');
+        $team->projectsWithPivotModelNoId()->attach([['US', 1], ['EU', 2]]);
+
+        $result = $team->projectsWithPivotModelNoId()->detach([['US', 1]]);
+
+        $this->assertSame(1, $result);
+        $this->assertSame(1, Capsule::table('project_team_no_id')->count());
+        $this->assertSame('EU', Capsule::table('project_team_no_id')->value('project_region_code'));
+    }
+
     public function test_canonical_key_normalizes_scalar_types_and_preserves_null()
     {
         $relation = $this->createTeam('US', 1, 'Alpha')->projects();
