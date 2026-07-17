@@ -201,6 +201,78 @@ class HasManyTest extends TestCase
         ], $trackingTask->toArray());
     }
 
+    public function test_Compoships_hasOneOrMany_upsert__single_record()
+    {
+        $allocation = $this->createAllocation(10, 20);
+
+        $allocation->trackingTasks()->upsert([
+            'id'         => 10,
+            'booking_id' => 999,
+            'vehicle_id' => 999,
+            'deleted_at' => null,
+        ], ['id'], ['deleted_at']);
+
+        $trackingTask = (array) Capsule::table('tracking_tasks')->where('id', 10)->first();
+
+        $this->assertEquals('10', $trackingTask['booking_id']);
+        $this->assertEquals('20', $trackingTask['vehicle_id']);
+        $this->assertNull($trackingTask['deleted_at']);
+    }
+
+    public function test_Compoships_hasOneOrMany_upsert__multiple_records_and_update()
+    {
+        $allocation = $this->createAllocation(10, 20);
+        Capsule::table('tracking_tasks')->insert([
+            'id'         => 20,
+            'booking_id' => 10,
+            'vehicle_id' => 20,
+            'created_at' => Carbon::now()->toDateTimeString(),
+            'updated_at' => Carbon::now()->toDateTimeString(),
+            'deleted_at' => null,
+        ]);
+
+        $allocation->trackingTasks()->upsert([
+            [
+                'id'         => 20,
+                'booking_id' => 999,
+                'vehicle_id' => 999,
+                'deleted_at' => Carbon::now()->addDay()->toDateTimeString(),
+            ],
+            [
+                'id'         => 21,
+                'booking_id' => 999,
+                'vehicle_id' => 999,
+                'deleted_at' => null,
+            ],
+        ], ['id'], ['booking_id', 'vehicle_id', 'deleted_at']);
+
+        $trackingTasks = Capsule::table('tracking_tasks')->orderBy('id')->get();
+
+        $this->assertCount(2, $trackingTasks);
+        $this->assertEquals('10', $trackingTasks[0]->booking_id);
+        $this->assertEquals('20', $trackingTasks[0]->vehicle_id);
+        $this->assertEquals(Carbon::now()->addDay()->toDateTimeString(), $trackingTasks[0]->deleted_at);
+        $this->assertEquals('10', $trackingTasks[1]->booking_id);
+        $this->assertEquals('20', $trackingTasks[1]->vehicle_id);
+        $this->assertNull($trackingTasks[1]->deleted_at);
+    }
+
+    public function test_Illuminate_hasOneOrMany_upsert__single_key_relation()
+    {
+        $allocation = $this->createAllocation();
+
+        $allocation->originalPackages()->upsert([
+            'id'            => 30,
+            'allocation_id' => 999,
+            'name'          => 'package',
+        ], ['id'], ['name']);
+
+        $package = (array) Capsule::table('original_packages')->where('id', 30)->first();
+
+        $this->assertEquals('1', $package['allocation_id']);
+        $this->assertEquals('package', $package['name']);
+    }
+
     /**
      * @covers \Awobaz\Compoships\Database\Query\Builder::whereIn
      */
