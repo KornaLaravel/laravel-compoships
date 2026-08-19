@@ -32,10 +32,14 @@ trait HasOneOrMany
                 $allParentKeyValuesAreNull = array_unique($parentKeyValue) === [null];
 
                 foreach ($this->foreignKey as $index => $key) {
-                    $tmp = explode('.', $key);
-                    $key = end($tmp);
-                    $fullKey = $this->getRelated()
-                            ->getTable().'.'.$key;
+                    if (is_string($key)) {
+                        $tmp = explode('.', $key);
+                        $key = end($tmp);
+                        $fullKey = $this->getRelated()
+                                ->getTable().'.'.$key;
+                    } else {
+                        $fullKey = $key;
+                    }
                     $this->query->where($fullKey, '=', $parentKeyValue[$index]);
 
                     if ($allParentKeyValuesAreNull) {
@@ -115,7 +119,9 @@ trait HasOneOrMany
         $key = $this->getQualifiedForeignKeyName();
 
         if (is_array($key)) { //Check for multi-columns relationship
-            return array_map(fn ($k) => last(explode('.', $k)), $key);
+            $grammar = $this->getConnection()->getQueryGrammar();
+
+            return array_map(fn ($k) => last(explode('.', $grammar->isExpression($k) ? $k->getValue($grammar) : $k)), $key);
         } else {
             return last(explode('.', $key));
         }
