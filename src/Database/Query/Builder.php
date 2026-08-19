@@ -82,6 +82,13 @@ class Builder extends BaseQueryBuilder
 
     public function whereColumn($first, $operator = null, $second = null, $boolean = 'and')
     {
+        // If the given operator is not found in the list of valid operators we will
+        // assume that the developer is just short-cutting the '=' operators and
+        // we will set the operators to '=' and set the values appropriately.
+        if ($this->invalidOperator($operator)) {
+            [$second, $operator] = [$operator, '='];
+        }
+
         // If the column and values are arrays, we will assume it is a multi-columns relationship
         // and we adjust the 'where' clauses accordingly
         if (is_array($first) && is_array($second)) {
