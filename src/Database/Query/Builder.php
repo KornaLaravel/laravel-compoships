@@ -2,6 +2,7 @@
 
 namespace Awobaz\Compoships\Database\Query;
 
+use Awobaz\Compoships\Exceptions\InvalidUsageException;
 use Illuminate\Database\Query\Builder as BaseQueryBuilder;
 use Illuminate\Support\Arr;
 
@@ -15,12 +16,33 @@ class Builder extends BaseQueryBuilder
      * @param string                                                          $boolean
      * @param bool                                                            $not
      *
+     * @throws \Awobaz\Compoships\Exceptions\InvalidUsageException
+     *
      * @return $this
      */
     public function whereIn($column, $values, $boolean = 'and', $not = false)
     {
         // Here we implement custom support for multi-column 'IN'
         if (is_array($column)) {
+            // An empty tuple list would compile to invalid `IN ()` SQL on most
+            // drivers, and a tuple whose arity differs from the column count
+            // would expand into more (or fewer) placeholders than bindings:
+            // silently NULL-filled on SQLite, a hard protocol error elsewhere.
+            if (empty($values)) {
+                return $this->whereRaw($not ? '1 = 1' : '0 = 1', [], $boolean);
+            }
+
+            foreach ($values as $tuple) {
+                if (!is_array($tuple) || count($tuple) !== count($column)) {
+                    throw new InvalidUsageException(sprintf(
+                        'Composite whereIn expects tuples of arity %d (columns: %s), got %s.',
+                        count($column),
+                        implode(', ', $column),
+                        var_export($tuple, true)
+                    ));
+                }
+            }
+
             $inOperator = $not ? 'NOT IN' : 'IN';
             $prefix = $this->getConnection()->getTablePrefix();
 

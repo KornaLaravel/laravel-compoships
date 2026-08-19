@@ -49,6 +49,18 @@ class Team extends Model
         )->using(ProjectTeamPivot::class);
     }
 
+    public function projectsWithPivotModelNoId()
+    {
+        return $this->belongsToMany(
+            Project::class,
+            'project_team_no_id',
+            ['team_region_code', 'team_division_id'],
+            ['project_region_code', 'project_division_id'],
+            ['region_code', 'division_id'],
+            ['region_code', 'division_id']
+        )->using(ProjectTeamNoIdPivot::class);
+    }
+
     public function projectsWithEnumPivot()
     {
         return $this->belongsToMany(
