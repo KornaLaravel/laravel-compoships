@@ -175,7 +175,7 @@ class BelongsToMany extends BaseBelongsToMany
         $dictionary = $this->buildDictionary($results);
 
         foreach ($models as $model) {
-            $key = $this->buildDictionaryKey($model, $this->parentKey);
+            $key = $this->buildDictionaryKey($model, $this->parentKey) ?? '';
 
             if (isset($dictionary[$key])) {
                 $model->setRelation(
@@ -204,7 +204,7 @@ class BelongsToMany extends BaseBelongsToMany
         $dictionary = [];
 
         foreach ($results as $result) {
-            $key = $this->buildDictionaryKey($result->{$this->accessor}, $this->foreignPivotKey);
+            $key = $this->buildDictionaryKey($result->{$this->accessor}, $this->foreignPivotKey) ?? '';
             $dictionary[$key][] = $result;
         }
 
