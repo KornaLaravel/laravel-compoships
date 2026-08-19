@@ -122,6 +122,37 @@ trait HasOneOrMany
     }
 
     /**
+     * Insert new records or update the existing ones.
+     *
+     * @param array        $values
+     * @param array|string $uniqueBy
+     * @param array|null   $update
+     *
+     * @return int
+     */
+    public function upsert(array $values, $uniqueBy, $update = null)
+    {
+        if (!is_array($this->foreignKey)) {
+            return parent::upsert($values, $uniqueBy, $update);
+        }
+
+        if (!empty($values) && !is_array(array_first($values))) {
+            $values = [$values];
+        }
+
+        $foreignKey = $this->getForeignKeyName();
+        $parentKeyValue = $this->getParentKey();
+
+        foreach ($values as $recordIndex => $value) {
+            foreach ($foreignKey as $keyIndex => $key) {
+                $values[$recordIndex][$key] = $parentKeyValue[$keyIndex];
+            }
+        }
+
+        return $this->getQuery()->upsert($values, $uniqueBy, $update);
+    }
+
+    /**
      * Attach a model instance to the parent model.
      *
      * @param \Illuminate\Database\Eloquent\Model $model
